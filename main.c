@@ -20,15 +20,21 @@ void cleanup();
 
 int main(int argc, char *argv[]) {
   int init = init_socket();
+  char *response;
   if (init != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
-  // if (connect_SSL() != EXIT_SUCCESS) {
-  //   printf("Error initializing SSL socket\n");
-  //   return EXIT_FAILURE;
-  // }
+  if (connect_SSL() != EXIT_SUCCESS) {
+    printf("Error initializing SSL socket\n");
+    return EXIT_FAILURE;
+  }
 
-  send_request(SARPSBORG);
+  // send_request(SARPSBORG);
+  int status = send_ssl_request(SARPSBORG, &response);
+  if (status) {
+    printf("Response: %s\n", response);
+    free(response);
+  }
   server_cleanup();
   return EXIT_SUCCESS;
 }

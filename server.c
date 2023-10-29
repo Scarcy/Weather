@@ -10,10 +10,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define PORT 80
+#define PORT 443
 #define HOST "api.met.no"
 #define USER_AGENT "weatherapp/0.1 https://github.com/Scarcy/Weather"
-
+#define ACCEPT "application/json;charset=utf-8"
+#define CHUNK_SIZE 4096
 static int sockfd;
 static struct sockaddr_in serv_addr;
 static struct hostent *server;
@@ -21,6 +22,8 @@ static SSL_CTX *global_ctx;
 static SSL *global_ssl;
 location *locations;
 
+char *split_response_string(unsigned char *http_response);
+char *allocate_response_string(unsigned char *http_response);
 void static create_locations();
 int static init_SSL();
 
@@ -84,6 +87,72 @@ int send_request(enum City city) {
   return EXIT_SUCCESS;
 };
 
+int send_ssl_request(enum City city, char **response) {
+  printf("Start of send_request\n");
+  char *request = malloc(sizeof(char) * 1024);
+  sprintf(request,
+          "GET /weatherapi/locationforecast/2.0/compact.json?lat=%.4f&lon=%.4f "
+          "HTTP/1.1\r\nHost: %s\r\nAccept: %s\r\nUser-Agent: %s\r\nConnection: "
+          "close\r\n\r\n",
+          locations[city].latitude, locations[city].longitude, HOST, ACCEPT,
+          USER_AGENT);
+
+  location loc = locations[city];
+  printf("Request string: %s\n", request);
+  int bytes_written = SSL_write(global_ssl, request, strlen(request));
+  if (bytes_written < 0) {
+    perror("Error writing to socket");
+    ERR_print_errors_fp(stderr);
+    free(request);
+    return EXIT_FAILURE;
+  }
+  printf("Request sent\n");
+
+  unsigned char *largeBuffer = NULL;
+  size_t totalBytesRead = 0;
+  size_t bufferOffset = 0;
+
+  while (1) { // Infinite loop to keep reading until we have all data
+    // Reallocate memory to hold the next chunk of data
+    unsigned char *temp = realloc(largeBuffer, totalBytesRead + CHUNK_SIZE);
+    if (temp == NULL) {
+      perror("Failed to realloc memory");
+      exit(EXIT_FAILURE);
+    }
+    largeBuffer = temp;
+
+    // Read data into the buffer at the current offset
+    int bytes_read =
+        SSL_read(global_ssl, largeBuffer + bufferOffset, CHUNK_SIZE);
+
+    if (bytes_read > 0) {
+      // Successfully read `bytes_read` bytes
+      totalBytesRead += bytes_read;
+      bufferOffset += bytes_read; // Move the buffer offset for the next read
+
+      // Do any additional check here to see if you've received all the data,
+      // such as looking for a closing tag in a JSON string, etc.
+
+    } else if (bytes_read == 0) {
+      // Connection was closed by peer
+      printf("Connection was closed by peer.\n");
+      break;
+    } else {
+      // An error occurred
+      printf("SSL_read failed. Error: %d.\n",
+             SSL_get_error(global_ssl, bytes_read));
+      break;
+    }
+  }
+
+  // NULL-terminate the buffer, assuming it's a string
+  largeBuffer[totalBytesRead] = '\0';
+  // printf("Response: %s\n", largeBuffer);
+  free(request);
+  *response = split_response_string(largeBuffer);
+  free(largeBuffer);
+  return EXIT_SUCCESS;
+}
 void static create_locations() {
   locations = malloc(sizeof(location) * 3);
   // Høyås: 59.274690869472174, 11.06301547334504
@@ -106,7 +175,7 @@ int static init_SSL() {
   SSL_load_error_strings();
   OpenSSL_add_all_algorithms();
 
-  const SSL_METHOD *method = SSLv23_client_method();
+  const SSL_METHOD *method = TLS_client_method();
   global_ctx = SSL_CTX_new(method);
 
   if (global_ctx == NULL) {
@@ -133,6 +202,40 @@ int connect_SSL() {
   printf("Connected with %s encryption\n", SSL_get_cipher(global_ssl));
   return EXIT_SUCCESS;
 }
+
+char *split_response_string(unsigned char *http_response) {
+  char *header_end = strstr((char *)http_response, "\r\n\r\n");
+
+  if (header_end) {
+    header_end += 4;
+
+    char *json_payload = strdup(header_end);
+    return json_payload;
+  } else {
+    printf("Error splitting response string\n");
+    return NULL;
+  }
+}
+// SEEMINGLY REDUNTANT SINCE STRDUP DOES THE SAME THING, I THINK
+// char *allocate_response_string(unsigned char *http_response) {
+//   const char *content_length_header = "Content-Length: ";
+//   char *found = strstr((char *)http_response, content_length_header);
+//   int content_length = 0;
+//
+//   if (found) {
+//     sscanf(found + strlen(content_length_header), "%d", &content_length);
+//     printf("Content-Length: %d\n", content_length);
+//   } else {
+//     printf("Content-Length wasn't found, so we can't allocate memory for the
+//     "
+//            "response string\n");
+//     exit(EXIT_FAILURE);
+//   }
+//
+//   char *response = malloc(sizeof(char) * content_length);
+//   response = split_response_string(http_response);
+//   return response;
+// }
 void server_cleanup() {
   printf("Cleaning up server\n");
   free(locations);
