@@ -1,3 +1,4 @@
+#include "json_parser.h"
 #include "server.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -31,8 +32,10 @@ int main(int argc, char *argv[]) {
 
   // send_request(SARPSBORG);
   int status = send_ssl_request(SARPSBORG, &response);
-  if (status) {
-    printf("Response: %s\n", response);
+  printf("Status: %d\n", status);
+  if (status == EXIT_SUCCESS) {
+    printf("Before json_parse\n");
+    json_parse(response);
     free(response);
   }
   server_cleanup();
