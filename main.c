@@ -38,6 +38,8 @@ int main(int argc, char *argv[]) {
     json_parse(response);
     free(response);
   }
+  print_weather_data();
   server_cleanup();
+  json_cleanup();
   return EXIT_SUCCESS;
 }
