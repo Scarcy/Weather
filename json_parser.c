@@ -1,14 +1,22 @@
 #include "json_parser.h"
 #include <cjson/cJSON.h>
+#include <locale.h> // For setlocale
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 // Global Variables to be freed when cleanup
+#define MAX_DAYS 15
+#define MAX_HOURS 24
+
+#define END_OF_DAY                                                             \
+  (weather_data) { .time = -1, .air_temperature = -999.0 }
+#define END_OF_ARRAY                                                           \
+  (weather_data) { .time = -2, .air_temperature = -999.0 }
 
 cJSON *root;
 char *jsonString;
-weather_data *weather_data_array;
-size_t weather_data_array_size = 0;
+weather_data weather_data_array[MAX_DAYS][MAX_HOURS];
+size_t total_days = 1;
 
 char *trimQuotes(char *str);
 int write_json_to_file(cJSON *json);
@@ -45,23 +53,46 @@ int parse_weather_data() {
     return EXIT_FAILURE;
   }
 
-  weather_data_array =
-      malloc(sizeof(weather_data) * cJSON_GetArraySize(timeseries));
   cJSON *entry;
   int i = 0;
+  int j = 0;
+  struct tm tm_temp = {0};
+  tm_temp.tm_year = -1;
   cJSON_ArrayForEach(entry, timeseries) {
     cJSON *time = cJSON_GetObjectItemCaseSensitive(entry, "time");
     cJSON *data = cJSON_GetObjectItemCaseSensitive(entry, "data");
     cJSON *instant = cJSON_GetObjectItemCaseSensitive(data, "instant");
     cJSON *details = cJSON_GetObjectItemCaseSensitive(instant, "details");
 
-    weather_data_array[i].time = convert_time_format(cJSON_Print(time));
-    weather_data_array[i].air_temperature =
+    struct tm tm_time = convert_time_format(cJSON_Print(time));
+
+    if (tm_temp.tm_year == -1) {
+      tm_temp = tm_time;
+    }
+    // If we get to the next day, go to the next row in the array
+    // This makes [i] the array for days and [j] the array for hours
+    if (tm_time.tm_yday != tm_temp.tm_yday) {
+      weather_data_array[i][j] = END_OF_DAY; // Add end of day marker
+      i++;
+      j = 0;
+      tm_temp = tm_time;
+    }
+
+    weather_data_array[i][j].time = convert_time_format(cJSON_Print(time));
+    weather_data_array[i][j].air_temperature =
         cJSON_GetObjectItemCaseSensitive(details, "air_temperature")
             ->valuedouble;
-    weather_data_array_size++;
-    i++;
+    j++;
   }
+
+  // Add end of array marker for last element added
+  if (j > 0) {
+    weather_data_array[i][j] = END_OF_DAY;
+  }
+
+  total_days = i + 1;
+  weather_data_array[total_days][0] = END_OF_ARRAY;
+
   return EXIT_SUCCESS;
 }
 
@@ -99,6 +130,7 @@ struct tm convert_time_format(char *time) {
   free(time);
   return tm_time;
 }
+
 int write_json_to_file(cJSON *json) {
   FILE *fp;
   fp = fopen("weather.json", "w");
@@ -131,17 +163,34 @@ char *trimQuotes(char *str) {
   return strdup(temp);
 }
 void print_weather_data() {
-  for (int i = 0; i < weather_data_array_size; i++) {
-    char buffer[80];
-    strftime(buffer, sizeof(buffer), "%c", &weather_data_array[i].time);
-    printf("Time: %s\n", buffer);
-    printf("Hour: %d\n", weather_data_array[i].time.tm_hour);
-    printf("Air Temperature: %.1lf C\n", weather_data_array[i].air_temperature);
+  setlocale(LC_ALL, ""); // Set the locale to support Unicode characters
+  for (int day = 0; day < total_days - 1; day++) {
+    printf("\n");
+    for (int hour = 0;; hour++) {
+      if (weather_data_array[day][hour].time.tm_year ==
+          END_OF_DAY.time.tm_year) {
+        break;
+      }
+      // Convert struct tm to readable time string
+      char hour_string[80];
+      strftime(hour_string, sizeof(hour_string), "%c",
+               &weather_data_array[day][hour].time);
+
+      if (hour == 0) {
+        printf("Time: %s\n", hour_string);
+      }
+      if (hour % 5 == 0) {
+        printf("\n");
+      }
+
+      printf("%02d:%02d : ", weather_data_array[day][hour].time.tm_hour,
+             weather_data_array[day][hour].time.tm_min);
+      printf("%.1lf ℃ \t", weather_data_array[day][hour].air_temperature);
+    }
     printf("\n");
   }
 }
 void json_cleanup() {
   cJSON_Delete(root);
   free(jsonString);
-  free(weather_data_array);
 }
