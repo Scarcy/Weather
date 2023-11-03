@@ -162,6 +162,11 @@ char *trimQuotes(char *str) {
   }
   return strdup(temp);
 }
+void print_hline() {
+  printf(
+      "\n---------------------------------------------------------------------"
+      "------------------\n");
+}
 void print_weather_data() {
   setlocale(LC_ALL, ""); // Set the locale to support Unicode characters
   for (int day = 0; day < total_days - 1; day++) {
@@ -183,11 +188,17 @@ void print_weather_data() {
         printf("\n");
       }
 
+      // Hacky fix to stop printing the next days weather data
+      // Should find a better way to do this
+      if (hour > 5 && weather_data_array[day][hour].time.tm_hour == 0) {
+        break;
+      }
+
       printf("%02d:%02d : ", weather_data_array[day][hour].time.tm_hour,
              weather_data_array[day][hour].time.tm_min);
       printf("%.1lf ℃ \t", weather_data_array[day][hour].air_temperature);
     }
-    printf("\n");
+    print_hline();
   }
 }
 void json_cleanup() {
