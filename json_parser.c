@@ -1,5 +1,5 @@
 #include "json_parser.h"
-#include <cjson/cJSON.h>
+#include "libs/cJSON.h"
 #include <locale.h> // For setlocale
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +12,8 @@
   (weather_data) { .time = -1, .air_temperature = -999.0 }
 #define END_OF_ARRAY                                                           \
   (weather_data) { .time = -2, .air_temperature = -999.0 }
+#define END_OF_DAY_TIME -1
+#define END_OF_DAY_TEMPERATURE -999.0
 
 cJSON *root;
 char *jsonString;
@@ -25,6 +27,8 @@ int parse_weather_data();
 void print_weather_data();
 static char *convert_time_format_string(char *time);
 struct tm convert_time_format(char *time);
+char *format_time_to_string(int hour, int min);
+char *format_temprature_to_string(double temp);
 
 int json_parse(char *jsonstring) {
   printf("Start of json_parse\n");
@@ -171,7 +175,7 @@ void print_weather_data() {
   setlocale(LC_ALL, ""); // Set the locale to support Unicode characters
   for (int day = 0; day < total_days - 1; day++) {
     printf("\n");
-    for (int hour = 0;; hour++) {
+    for (int hour = 0;; hour += 8) {
       if (weather_data_array[day][hour].time.tm_year ==
           END_OF_DAY.time.tm_year) {
         break;
@@ -184,22 +188,55 @@ void print_weather_data() {
       if (hour == 0) {
         printf("Time: %s\n", hour_string);
       }
-      if (hour % 5 == 0) {
-        printf("\n");
-      }
+
+      // if (hour % 5 == 0) { // Old way of limiting the amount per line
+      //   printf("\n");
+      // }
 
       // Hacky fix to stop printing the next days weather data
       // Should find a better way to do this
-      if (hour > 5 && weather_data_array[day][hour].time.tm_hour == 0) {
+      if (hour > 0 && weather_data_array[day][hour].time.tm_hour == 0) {
         break;
       }
 
-      printf("%02d:%02d : ", weather_data_array[day][hour].time.tm_hour,
-             weather_data_array[day][hour].time.tm_min);
-      printf("%.1lf ℃ \t", weather_data_array[day][hour].air_temperature);
+      for (int time_header = hour; time_header < hour + 8; time_header++) {
+        if (weather_data_array[day][time_header].air_temperature ==
+            END_OF_DAY_TEMPERATURE) {
+          break;
+        }
+        char *hour_string = format_time_to_string(
+            weather_data_array[day][time_header].time.tm_hour,
+            weather_data_array[day][time_header].time.tm_min);
+
+        printf("%-10s", hour_string);
+        free(hour_string);
+      }
+      printf("\n");
+      for (int weather_data = hour; weather_data < hour + 8; weather_data++) {
+        if (weather_data_array[day][weather_data].air_temperature ==
+            END_OF_DAY_TEMPERATURE) {
+          break;
+        }
+        char *temp_string = format_temprature_to_string(
+            weather_data_array[day][weather_data].air_temperature);
+        printf("%-12s", temp_string);
+        free(temp_string);
+      }
+      printf("\n\n");
     }
     print_hline();
   }
+}
+// Need to free the returned string
+char *format_time_to_string(int hour, int min) {
+  char *hour_string = malloc(sizeof(char) * 6);
+  snprintf(hour_string, sizeof(hour_string), "%02d:%02d", hour, min);
+  return hour_string;
+}
+char *format_temprature_to_string(double temp) {
+  char *temp_string = malloc(sizeof(char) * 5);
+  snprintf(temp_string, sizeof(temp_string), "%.1lf %s", temp, "℃");
+  return temp_string;
 }
 void json_cleanup() {
   cJSON_Delete(root);

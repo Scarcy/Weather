@@ -1,18 +1,20 @@
 cmake_minimum_required(VERSION 3.27.7)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-project(weather C)
-add_executable(${PROJECT_NAME} main.c server.c json_parser.c)
+project(cweather C)
+add_executable(${PROJECT_NAME} main.c server.c json_parser.c libs/cJSON.c)
 
 add_library(jsonParser STATIC json_parser.c)
 add_library(server STATIC server.c)
-find_package(cjson REQUIRED)
-target_link_libraries(jsonParser PUBLIC cjson)
-
+add_library(cjson STATIC libs/cJSON.c)
+set(CMAKE_INSTALL_RPATH "/usr/local/lib")
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 # Locate OpenSSL on the system
 find_package(OpenSSL REQUIRED)
 
 # Include OpenSSL headers
 include_directories(${OPENSSL_INCLUDE_DIR})
-
+include_directories(/usr/local/lib/libcjson.1.dylib)
 # Link OpenSSL and your static libraries to the target
 target_link_libraries(${PROJECT_NAME} PRIVATE jsonParser server ${OPENSSL_LIBRARIES})
+
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
