@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-// Global Variables to be freed when cleanup
+
 #define MAX_DAYS 15
 #define MAX_HOURS 24
 
@@ -15,11 +15,13 @@
 #define END_OF_DAY_TIME -1
 #define END_OF_DAY_TEMPERATURE -999.0
 
+// GLOBAL VARIABLES
 cJSON *root;
 char *jsonString;
 weather_data weather_data_array[MAX_DAYS][MAX_HOURS];
 size_t total_days = 1;
 
+// FUNCTION DECLARATIONS
 char *trimQuotes(char *str);
 int write_json_to_file(cJSON *json);
 void json_cleanup();
@@ -29,6 +31,13 @@ static char *convert_time_format_string(char *time);
 struct tm convert_time_format(char *time);
 char *format_time_to_string(int hour, int min);
 char *format_temprature_to_string(double temp);
+char *format_precipitation_to_string(double precipitation);
+char *map_symbol_code_to_icon(char *symbol_code);
+
+const char *SYMBOL_STRINGS[SYMBOL_CODE_COUNT] = {
+    [thunder] = "🌩", [rain] = "🌧", [snow] = "⛄", [sleet] = "☃",
+    [cloudy] = "☁",   [fair] = "🌤", [fog] = "🌫",  [clearsky] = "☀",
+};
 
 int json_parse(char *jsonstring) {
   printf("Start of json_parse\n");
@@ -42,7 +51,7 @@ int json_parse(char *jsonstring) {
     return EXIT_FAILURE;
   }
 
-  // int result = write_json_to_file(root);
+  int result = write_json_to_file(root);
   parse_weather_data();
   return EXIT_SUCCESS;
 }
@@ -68,6 +77,18 @@ int parse_weather_data() {
     cJSON *instant = cJSON_GetObjectItemCaseSensitive(data, "instant");
     cJSON *details = cJSON_GetObjectItemCaseSensitive(instant, "details");
 
+    cJSON *next_12_hours =
+        cJSON_GetObjectItemCaseSensitive(data, "next_12_hours");
+    cJSON *next_12_hours_summary =
+        cJSON_GetObjectItemCaseSensitive(next_12_hours, "summary");
+
+    cJSON *next_1_hours =
+        cJSON_GetObjectItemCaseSensitive(data, "next_1_hours");
+    cJSON *next_1_hours_summary =
+        cJSON_GetObjectItemCaseSensitive(next_1_hours, "summary");
+
+    cJSON *next_1_hours_details =
+        cJSON_GetObjectItemCaseSensitive(next_1_hours, "details");
     struct tm tm_time = convert_time_format(cJSON_Print(time));
 
     if (tm_temp.tm_year == -1) {
@@ -82,10 +103,40 @@ int parse_weather_data() {
       tm_temp = tm_time;
     }
 
+    cJSON *symbol_code_12_hours =
+        cJSON_GetObjectItemCaseSensitive(next_12_hours_summary, "symbol_code");
+    cJSON *symbol_code_1_hours =
+        cJSON_GetObjectItemCaseSensitive(next_1_hours_summary, "symbol_code");
+
+    cJSON *precipitation_amount = cJSON_GetObjectItemCaseSensitive(
+        next_1_hours_details, "precipitation_amount");
+
     weather_data_array[i][j].time = convert_time_format(cJSON_Print(time));
     weather_data_array[i][j].air_temperature =
         cJSON_GetObjectItemCaseSensitive(details, "air_temperature")
             ->valuedouble;
+
+    if (symbol_code_12_hours != NULL && cJSON_IsString(symbol_code_12_hours)) {
+      weather_data_array[i][j].symbol_code_12_hours = strdup(
+          cJSON_GetObjectItemCaseSensitive(next_12_hours_summary, "symbol_code")
+              ->valuestring);
+    }
+    if (symbol_code_1_hours != NULL && cJSON_IsString(symbol_code_1_hours)) {
+      weather_data_array[i][j].symbol_code_hourly = strdup(
+          cJSON_GetObjectItemCaseSensitive(next_1_hours_summary, "symbol_code")
+              ->valuestring);
+    }
+
+    if (precipitation_amount != NULL && cJSON_IsNumber(precipitation_amount)) {
+      weather_data_array[i][j].precipitation =
+          precipitation_amount->valuedouble;
+      printf("Precipitation JSON: %f\n", precipitation_amount->valuedouble);
+      printf("Precipitation Struct: %f\n",
+             weather_data_array[i][j].precipitation);
+    } else {
+      printf("No precipitation data\n");
+    }
+    printf("J = %d\n", j);
     j++;
   }
 
@@ -186,7 +237,12 @@ void print_weather_data() {
                &weather_data_array[day][hour].time);
 
       if (hour == 0) {
-        printf("Time: %s\n", hour_string);
+        printf("Time: %s - ", hour_string);
+        char *symbol_icon = map_symbol_code_to_icon(
+            weather_data_array[day][hour].symbol_code_12_hours);
+        printf("%s - ", weather_data_array[day][hour].symbol_code_12_hours);
+        printf("%s\n", symbol_icon);
+        free(symbol_icon);
       }
 
       // if (hour % 5 == 0) { // Old way of limiting the amount per line
@@ -212,6 +268,7 @@ void print_weather_data() {
         free(hour_string);
       }
       printf("\n");
+
       for (int weather_data = hour; weather_data < hour + 8; weather_data++) {
         if (weather_data_array[day][weather_data].air_temperature ==
             END_OF_DAY_TEMPERATURE) {
@@ -221,6 +278,21 @@ void print_weather_data() {
             weather_data_array[day][weather_data].air_temperature);
         printf("%-12s", temp_string);
         free(temp_string);
+      }
+      printf("\n");
+      for (int precipitation = hour; precipitation < hour + 8;
+           precipitation++) {
+
+        if (weather_data_array[day][precipitation].air_temperature ==
+            END_OF_DAY_TEMPERATURE) {
+          break;
+        }
+
+        char *precip_string = format_precipitation_to_string(
+            weather_data_array[day][precipitation].precipitation);
+
+        printf("%-10s", precip_string);
+        free(precip_string);
       }
       printf("\n\n");
     }
@@ -237,6 +309,36 @@ char *format_temprature_to_string(double temp) {
   char *temp_string = malloc(sizeof(char) * 10);
   snprintf(temp_string, 10, "%.1lf %s", temp, "℃");
   return temp_string;
+}
+char *format_precipitation_to_string(double precipitation) {
+  char *precip_string = malloc(sizeof(char) * 10);
+  snprintf(precip_string, 10, "%.1lf %s", precipitation, "mm");
+  return precip_string;
+}
+int containsWord(const char *str, const char *word) {
+  return strstr(str, word) != NULL;
+}
+
+char *map_symbol_code_to_icon(char *symbol_code) {
+  if (containsWord(symbol_code, "clearsky")) {
+    return strdup(SYMBOL_STRINGS[clearsky]);
+  } else if (containsWord(symbol_code, "fair")) {
+    return strdup(SYMBOL_STRINGS[fair]);
+  } else if (containsWord(symbol_code, "cloudy")) {
+    return strdup(SYMBOL_STRINGS[cloudy]);
+  } else if (containsWord(symbol_code, "snow")) {
+    return strdup(SYMBOL_STRINGS[snow]);
+  } else if (containsWord(symbol_code, "thunder")) {
+    return strdup(SYMBOL_STRINGS[thunder]);
+  } else if (containsWord(symbol_code, "rain")) {
+    return strdup(SYMBOL_STRINGS[rain]);
+  } else if (containsWord(symbol_code, "sleet")) {
+    return strdup(SYMBOL_STRINGS[sleet]);
+  } else if (containsWord(symbol_code, "fog")) {
+    return strdup(SYMBOL_STRINGS[fog]);
+  } else {
+    return strdup(SYMBOL_STRINGS[clearsky]);
+  }
 }
 void json_cleanup() {
   cJSON_Delete(root);
