@@ -14,4 +14,5 @@ int init_SSL_socket();
 int connect_SSL();
 int send_request(enum City location);
 int send_ssl_request(enum City location, char** response);
+int send_ssl_request_coordinates(float latitude, float longitude, char** response);
 void server_cleanup();

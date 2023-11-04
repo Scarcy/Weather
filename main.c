@@ -1,3 +1,5 @@
+#include "debug.h"
+#include "flags.h"
 #include "json_parser.h"
 #include "server.h"
 #include <ctype.h>
@@ -8,18 +10,15 @@
 #include <sys/wait.h>
 #include <unistd.h>
 // Global Variables
-int tflag = 0;
-int dflag = 0;
-// End Global Variables
-
-// Function Prototypes
 
 // Handle the command line parameters
-int handle_params();
+int handle_params(int argc, char *argv[]);
 // Function to cleanup the program. Closes the socket and frees memory.
 void cleanup();
 
 int main(int argc, char *argv[]) {
+  handle_params(argc, argv);
+
   int init = init_socket();
   char *response;
   if (init != EXIT_SUCCESS) {
@@ -29,12 +28,18 @@ int main(int argc, char *argv[]) {
     printf("Error initializing SSL socket\n");
     return EXIT_FAILURE;
   }
-
+  int status;
   // send_request(SARPSBORG);
-  int status = send_ssl_request(SARPSBORG, &response);
+  if (sarp_flag) {
+    status = send_ssl_request(SARPSBORG, &response);
+  } else if (coordinate_flag) {
+    status = send_ssl_request_coordinates(clatitude, clongitude, &response);
+  } else {
+    status = send_ssl_request(SARPSBORG, &response);
+  }
   printf("Status: %d\n", status);
   if (status == EXIT_SUCCESS) {
-    printf("Before json_parse\n");
+    debugprint("Before json_parse\n");
     json_parse(response);
     free(response);
   }
@@ -42,4 +47,48 @@ int main(int argc, char *argv[]) {
   server_cleanup();
   json_cleanup();
   return EXIT_SUCCESS;
+}
+
+int handle_params(int argc, char *argv[]) {
+  int c;
+
+  while ((c = getopt(argc, argv, "dc:s")) != -1) {
+    switch (c) {
+    case 'd':
+      debug_flag = 1;
+      break;
+    case 's':
+      sarp_flag = 1;
+      break;
+    case 'c':;
+      char *token = strtok(optarg, ",");
+      if (token != NULL) {
+        clatitude = atof(token);
+        token = strtok(NULL, ",");
+        if (token != NULL) {
+          clongitude = atof(token);
+        } else {
+          fprintf(stderr, "Invalid coordinates: Missing Longitude\n");
+          return 1;
+        }
+      } else {
+        fprintf(stderr, "Invalid coordinates: Missing Latitude\n");
+        return 1;
+      }
+      coordinate_flag = 1;
+      break;
+    case '?':
+      if (optopt == 'c') {
+        fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+      } else if (isprint(optopt)) {
+        fprintf(stderr, "Unknown option '-%c'.\n", optopt);
+      } else {
+        fprintf(stderr, "Unknown option character '\\x%x'.\n", optopt);
+        return 1;
+      }
+    default:
+      abort();
+    }
+  }
+  return 0;
 }

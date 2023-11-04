@@ -1,4 +1,6 @@
 #include "server.h"
+#include "debug.h"
+#include "flags.h"
 #include <netdb.h>
 #include <netinet/in.h>
 #include <openssl/err.h>
@@ -52,12 +54,12 @@ int init_socket() {
     return EXIT_FAILURE;
   };
 
-  printf("Connected to %s\n", HOST);
+  debugprint("Connected to Host");
   return EXIT_SUCCESS;
 }
 
 int send_request(enum City city) {
-  printf("Start of send_request\n");
+  debugprint("Start of send_request\n");
   char *request = malloc(sizeof(char) * 1024);
   sprintf(request,
           "GET /weatherapi/locationforecast/2.0/compact?lat=%.4f&lon=%.4f "
@@ -66,13 +68,13 @@ int send_request(enum City city) {
           USER_AGENT);
 
   location loc = locations[city];
-  printf("Request string: %s\n", request);
+  debugprint(request);
   if (write(sockfd, request, strlen(request)) < 0) {
     perror("Error writing to socket");
     free(request);
     return EXIT_FAILURE;
   }
-  printf("Request sent\n");
+  debugprint("Request sent\n");
   char *response = malloc(sizeof(char) * 20000);
   ssize_t bytes_read = read(sockfd, response, 20000);
   if (bytes_read < 0) {
@@ -81,14 +83,14 @@ int send_request(enum City city) {
     free(response);
     return EXIT_FAILURE;
   }
-  printf("Response: %s\n", response);
+  debugprint(response);
   free(request);
   free(response);
   return EXIT_SUCCESS;
 };
 
 int send_ssl_request(enum City city, char **response) {
-  printf("Start of send_request\n");
+  debugprint("Start of send_request\n");
   char *request = malloc(sizeof(char) * 1024);
   sprintf(request,
           "GET /weatherapi/locationforecast/2.0/compact.json?lat=%.4f&lon=%.4f "
@@ -98,7 +100,7 @@ int send_ssl_request(enum City city, char **response) {
           USER_AGENT);
 
   location loc = locations[city];
-  printf("Request string: %s\n", request);
+  debugprint(request);
   int bytes_written = SSL_write(global_ssl, request, strlen(request));
   if (bytes_written < 0) {
     perror("Error writing to socket");
@@ -106,7 +108,7 @@ int send_ssl_request(enum City city, char **response) {
     free(request);
     return EXIT_FAILURE;
   }
-  printf("Request sent\n");
+  debugprint("Request sent\n");
 
   unsigned char *largeBuffer = NULL;
   size_t totalBytesRead = 0;
@@ -135,7 +137,72 @@ int send_ssl_request(enum City city, char **response) {
 
     } else if (bytes_read == 0) {
       // Connection was closed by peer
-      printf("Connection was closed by peer.\n");
+      debugprint("Connection was closed by peer.\n");
+      break;
+    } else {
+      // An error occurred
+      printf("SSL_read failed. Error: %d.\n",
+             SSL_get_error(global_ssl, bytes_read));
+      break;
+    }
+  }
+
+  // NULL-terminate the buffer, assuming it's a string
+  largeBuffer[totalBytesRead] = '\0';
+  // printf("Response: %s\n", largeBuffer);
+  free(request);
+  *response = split_response_string(largeBuffer);
+  free(largeBuffer);
+  return EXIT_SUCCESS;
+}
+int send_ssl_request_coordinates(float latitude, float longitude,
+                                 char **response) {
+  debugprint("Start of send_request\n");
+  char *request = malloc(sizeof(char) * 1024);
+  sprintf(request,
+          "GET /weatherapi/locationforecast/2.0/compact.json?lat=%.4f&lon=%.4f "
+          "HTTP/1.1\r\nHost: %s\r\nAccept: %s\r\nUser-Agent: %s\r\nConnection: "
+          "close\r\n\r\n",
+          latitude, longitude, HOST, ACCEPT, USER_AGENT);
+
+  debugprint(request);
+  int bytes_written = SSL_write(global_ssl, request, strlen(request));
+  if (bytes_written < 0) {
+    perror("Error writing to socket");
+    ERR_print_errors_fp(stderr);
+    free(request);
+    return EXIT_FAILURE;
+  }
+  debugprint("Request sent\n");
+
+  unsigned char *largeBuffer = NULL;
+  size_t totalBytesRead = 0;
+  size_t bufferOffset = 0;
+
+  while (1) { // Infinite loop to keep reading until we have all data
+    // Reallocate memory to hold the next chunk of data
+    unsigned char *temp = realloc(largeBuffer, totalBytesRead + CHUNK_SIZE);
+    if (temp == NULL) {
+      perror("Failed to realloc memory");
+      exit(EXIT_FAILURE);
+    }
+    largeBuffer = temp;
+
+    // Read data into the buffer at the current offset
+    int bytes_read =
+        SSL_read(global_ssl, largeBuffer + bufferOffset, CHUNK_SIZE);
+
+    if (bytes_read > 0) {
+      // Successfully read `bytes_read` bytes
+      totalBytesRead += bytes_read;
+      bufferOffset += bytes_read; // Move the buffer offset for the next read
+
+      // Do any additional check here to see if you've received all the data,
+      // such as looking for a closing tag in a JSON string, etc.
+
+    } else if (bytes_read == 0) {
+      // Connection was closed by peer
+      debugprint("Connection was closed by peer.\n");
       break;
     } else {
       // An error occurred
@@ -170,7 +237,7 @@ void static create_locations() {
   locations[2].longitude = 10.7461;
 }
 int static init_SSL() {
-  printf("Initializing SSL\n");
+  debugprint("Initializing SSL\n");
   SSL_library_init();
   SSL_load_error_strings();
   OpenSSL_add_all_algorithms();
@@ -183,11 +250,11 @@ int static init_SSL() {
     ERR_print_errors_fp(stderr);
     return EXIT_FAILURE;
   }
-  printf("SSL initialized\n");
+  debugprint("SSL initialized\n");
   return EXIT_SUCCESS;
 }
 int connect_SSL() {
-  printf("Connecting SSL\n");
+  debugprint("Connecting SSL\n");
   if (init_SSL() != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
@@ -199,7 +266,8 @@ int connect_SSL() {
     ERR_print_errors_fp(stderr);
     return EXIT_FAILURE;
   }
-  printf("Connected with %s encryption\n", SSL_get_cipher(global_ssl));
+  debugprint("Connected with %s encryption");
+  debugprint((char *)SSL_get_cipher(global_ssl));
   return EXIT_SUCCESS;
 }
 
@@ -237,7 +305,7 @@ char *split_response_string(unsigned char *http_response) {
 //   return response;
 // }
 void server_cleanup() {
-  printf("Cleaning up server\n");
+  debugprint("Cleaning up server\n");
   free(locations);
   close(sockfd);
   if (global_ssl != NULL) {

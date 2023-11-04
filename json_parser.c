@@ -1,4 +1,5 @@
 #include "json_parser.h"
+#include "debug.h"
 #include "libs/cJSON.h"
 #include <locale.h> // For setlocale
 #include <stdio.h>
@@ -40,7 +41,7 @@ const char *SYMBOL_STRINGS[SYMBOL_CODE_COUNT] = {
 };
 
 int json_parse(char *jsonstring) {
-  printf("Start of json_parse\n");
+  debugprint("Start of json_parse\n");
   root = cJSON_Parse(jsonstring);
   if (root == NULL) {
     const char *error_ptr = cJSON_GetErrorPtr();
@@ -130,13 +131,9 @@ int parse_weather_data() {
     if (precipitation_amount != NULL && cJSON_IsNumber(precipitation_amount)) {
       weather_data_array[i][j].precipitation =
           precipitation_amount->valuedouble;
-      printf("Precipitation JSON: %f\n", precipitation_amount->valuedouble);
-      printf("Precipitation Struct: %f\n",
-             weather_data_array[i][j].precipitation);
     } else {
-      printf("No precipitation data\n");
+      debugprint("No precipitation data\n");
     }
-    printf("J = %d\n", j);
     j++;
   }
 
