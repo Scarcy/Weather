@@ -234,8 +234,8 @@ char *format_time_to_string(int hour, int min) {
   return hour_string;
 }
 char *format_temprature_to_string(double temp) {
-  char *temp_string = malloc(sizeof(char) * 5);
-  snprintf(temp_string, sizeof(temp_string), "%.1lf %s", temp, "℃");
+  char *temp_string = malloc(sizeof(char) * 10);
+  snprintf(temp_string, 10, "%.1lf %s", temp, "℃");
   return temp_string;
 }
 void json_cleanup() {
