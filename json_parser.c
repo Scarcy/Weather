@@ -51,8 +51,8 @@ int json_parse(char *jsonstring) {
     cJSON_Delete(root);
     return EXIT_FAILURE;
   }
-
-  int result = write_json_to_file(root);
+  // Write the json to a file. Useful for debugging.
+  // int result = write_json_to_file(root);
   parse_weather_data();
   return EXIT_SUCCESS;
 }

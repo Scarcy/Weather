@@ -13,11 +13,13 @@
 
 // Handle the command line parameters
 int handle_params(int argc, char *argv[]);
+void welcome_print();
 // Function to cleanup the program. Closes the socket and frees memory.
 void cleanup();
 
 int main(int argc, char *argv[]) {
   handle_params(argc, argv);
+  welcome_print();
 
   int init = init_socket();
   char *response;
@@ -91,4 +93,20 @@ int handle_params(int argc, char *argv[]) {
     }
   }
   return 0;
+}
+void welcome_print() {
+
+  printf("___________.__  .__          _____                       __      __  "
+         "             __  .__                  \n");
+  printf("\\_   _____/|  | |  |   _____/ ____\\______ ____   ____   /  \\    / "
+         " \\ ____ _____ _/  |_|  |__   ___________ \n");
+  printf(" |    __)_ |  | |  | _/ __ \\   __\\/  ___// __ \\ /    \\  \\   "
+         "\\/\\/   // __ \\\\__  \\\\   __\\  |  \\_/ __ \\_  __ \\ \n");
+  printf(" |        \\|  |_|  |_\\  ___/|  |  \\___ \\\\  ___/|   |  \\  \\    "
+         "    /\\  ___/ / __ \\|  | |   Y  \\  ___/|  | \\/ \n");
+  printf("/_______  /|____/____/\\___  >__| /____  >\\___  >___|  /   \\__/\\  "
+         "/  \\___  >____  /__| |___|  /\\___  >__|   \n");
+  printf("        \\/                \\/          \\/     \\/     \\/         "
+         "\\/       \\/     \\/          \\/     \\/       \n");
+  printf("\n\n");
 }
