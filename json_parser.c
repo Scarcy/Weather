@@ -16,6 +16,15 @@
 #define END_OF_DAY_TIME -1
 #define END_OF_DAY_TEMPERATURE -999.0
 
+enum week_days {
+  Sunday,
+  Monday,
+  Tuesday,
+  Wednesday,
+  Thursday,
+  Friday,
+  Saturday
+};
 // GLOBAL VARIABLES
 cJSON *root;
 char *jsonString;
@@ -34,7 +43,8 @@ char *format_time_to_string(int hour, int min);
 char *format_temprature_to_string(double temp);
 char *format_precipitation_to_string(double precipitation);
 char *map_symbol_code_to_icon(char *symbol_code);
-
+char *format_day_to_string(struct tm time);
+char *get_day_from_int(int day);
 const char *SYMBOL_STRINGS[SYMBOL_CODE_COUNT] = {
     [thunder] = "🌩", [rain] = "🌧", [snow] = "⛄", [sleet] = "☃",
     [cloudy] = "☁",   [fair] = "🌤", [fog] = "🌫",  [clearsky] = "☀",
@@ -229,16 +239,17 @@ void print_weather_data() {
         break;
       }
       // Convert struct tm to readable time string
-      char hour_string[80];
-      strftime(hour_string, sizeof(hour_string), "%c",
-               &weather_data_array[day][hour].time);
+      char *hour_string =
+          format_day_to_string(weather_data_array[day][hour].time);
+      // strftime(hour_string, sizeof(hour_string), "%c",
+      //          &weather_data_array[day][hour].time);
 
       if (hour == 0) {
-        printf("Time: %s - ", hour_string);
+        printf("%s - ", hour_string);
         char *symbol_icon = map_symbol_code_to_icon(
             weather_data_array[day][hour].symbol_code_12_hours);
         printf("%s - ", weather_data_array[day][hour].symbol_code_12_hours);
-        printf("%s\n", symbol_icon);
+        printf("%s\n\n", symbol_icon);
         free(symbol_icon);
       }
 
@@ -316,6 +327,14 @@ int containsWord(const char *str, const char *word) {
   return strstr(str, word) != NULL;
 }
 
+char *format_day_to_string(struct tm time) {
+
+  char *buffer = malloc(sizeof(char) * 20);
+  const char *day_string = get_day_from_int(time.tm_wday);
+  sprintf(buffer, "%s %d.%d", day_string, time.tm_mday, time.tm_mon + 1);
+
+  return buffer;
+}
 char *map_symbol_code_to_icon(char *symbol_code) {
   if (containsWord(symbol_code, "clearsky")) {
     return strdup(SYMBOL_STRINGS[clearsky]);
@@ -335,6 +354,34 @@ char *map_symbol_code_to_icon(char *symbol_code) {
     return strdup(SYMBOL_STRINGS[fog]);
   } else {
     return strdup(SYMBOL_STRINGS[clearsky]);
+  }
+}
+char *get_day_from_int(int day) {
+  switch (day) {
+  case Sunday:
+    return "Sunday";
+    break;
+  case Monday:
+    return "Monday";
+    break;
+  case Tuesday:
+    return "Tuesday";
+    break;
+  case Wednesday:
+    return "Wednesday";
+    break;
+  case Thursday:
+    return "Thursday";
+    break;
+  case Friday:
+    return "Friday";
+    break;
+  case Saturday:
+    return "Saturday";
+    break;
+  default:
+    return "Unknown";
+    break;
   }
 }
 void json_cleanup() {
