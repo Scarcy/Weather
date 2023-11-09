@@ -100,8 +100,8 @@ int parse_weather_data() {
 
     cJSON *next_1_hours_details =
         cJSON_GetObjectItemCaseSensitive(next_1_hours, "details");
-    struct tm tm_time = convert_time_format(cJSON_Print(time));
-
+    char *time_string = cJSON_Print(time);
+    struct tm tm_time = convert_time_format(time_string);
     if (tm_temp.tm_year == -1) {
       tm_temp = tm_time;
     }
@@ -122,7 +122,7 @@ int parse_weather_data() {
     cJSON *precipitation_amount = cJSON_GetObjectItemCaseSensitive(
         next_1_hours_details, "precipitation_amount");
 
-    weather_data_array[i][j].time = convert_time_format(cJSON_Print(time));
+    weather_data_array[i][j].time = convert_time_format(time_string);
     weather_data_array[i][j].air_temperature =
         cJSON_GetObjectItemCaseSensitive(details, "air_temperature")
             ->valuedouble;
@@ -145,6 +145,7 @@ int parse_weather_data() {
       debugprint("No precipitation data\n");
     }
     j++;
+    free(time_string);
   }
 
   // Add end of array marker for last element added
@@ -253,6 +254,7 @@ void print_weather_data() {
         free(symbol_icon);
       }
 
+      free(hour_string);
       // if (hour % 5 == 0) { // Old way of limiting the amount per line
       //   printf("\n");
       // }
