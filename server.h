@@ -1,3 +1,4 @@
+#include <netinet/in.h>
 typedef struct {
   char* location_name;
   float latitude;;

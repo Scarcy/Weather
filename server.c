@@ -1,10 +1,9 @@
 #include "server.h"
 #include "debug.h"
 #include "flags.h"
-#include <netdb.h>
-#include <netinet/in.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
